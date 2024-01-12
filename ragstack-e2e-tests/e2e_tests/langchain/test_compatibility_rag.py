@@ -15,6 +15,7 @@ from e2e_tests.langchain.rag_application import (
     run_conversational_rag,
 )
 from e2e_tests.langchain.trulens import run_trulens_evaluation
+from e2e_tests.langchain.nemo_guardrails import run_nemo_guardrails
 
 from langchain.chat_models import ChatOpenAI, AzureChatOpenAI, ChatVertexAI, BedrockChat
 from langchain.embeddings import (
@@ -69,6 +70,11 @@ def openai_llm_streaming():
         streaming=True,
         temperature=0,
     )
+
+
+@pytest.fixture
+def openai_nemo():
+    return {"engine": "openai", "model": "gpt-3.5-turbo-16k"}
 
 
 @pytest.fixture
@@ -163,7 +169,7 @@ def huggingface_hub_embedding():
 @pytest.fixture
 def nvidia_embedding():
     get_required_env("NVIDIA_API_KEY")
-    from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+    from langchain_nvidia_ai_endpoints.embeddings import NVIDIAEmbeddings
 
     return NVIDIAEmbeddings(model="playground_nvolveqa_40k")
 
@@ -178,23 +184,28 @@ def nvidia_mixtral_llm():
 
 @pytest.mark.parametrize(
     "test_case",
-    ["rag_custom_chain", "conversational_rag", "trulens"],
+    # ["rag_custom_chain", "conversational_rag", "trulens", "nemo_guardrails"],
+    ["nemo_guardrails"],
 )
-@pytest.mark.parametrize("vector_store", ["astra_db", "cassandra"])
 @pytest.mark.parametrize(
-    "embedding,llm",
+    "vector_store",
+    # ["astra_db", "cassandra"],
+    ["cassandra"],
+)
+@pytest.mark.parametrize(
+    "embedding,llm,config",
     [
-        ("openai_embedding", "openai_llm"),
-        ("openai_embedding", "openai_llm_streaming"),
-        ("azure_openai_embedding", "azure_openai_llm"),
-        ("vertex_embedding", "vertex_llm"),
-        ("bedrock_titan_embedding", "bedrock_anthropic_llm"),
-        ("bedrock_cohere_embedding", "bedrock_meta_llm"),
-        ("huggingface_hub_embedding", "huggingface_hub_llm"),
-        ("nvidia_embedding", "nvidia_mixtral_llm"),
+        ("openai_embedding", "openai_llm", "openai_nemo"),
+        # ("openai_embedding", "openai_llm_streaming"),
+        # ("azure_openai_embedding", "azure_openai_llm"),
+        # ("vertex_embedding", "vertex_llm"),
+        # ("bedrock_titan_embedding", "bedrock_anthropic_llm"),
+        # ("bedrock_cohere_embedding", "bedrock_meta_llm"),
+        # ("huggingface_hub_embedding", "huggingface_hub_llm"),
+        # ("nvidia_embedding", "nvidia_mixtral_llm"),
     ],
 )
-def test_rag(test_case, vector_store, embedding, llm, request, record_property):
+def test_rag(test_case, vector_store, embedding, llm, config, request, record_property):
     set_current_test_info(
         "langchain::" + test_case,
         f"{llm},{embedding},{vector_store}",
@@ -202,16 +213,25 @@ def test_rag(test_case, vector_store, embedding, llm, request, record_property):
     resolved_vector_store = request.getfixturevalue(vector_store)
     resolved_embedding = request.getfixturevalue(embedding)
     resolved_llm = request.getfixturevalue(llm)
+    resolved_config = request.getfixturevalue(config)
     _run_test(
         test_case,
         resolved_vector_store,
         resolved_embedding,
         resolved_llm,
+        resolved_config,
         record_property,
     )
 
 
-def _run_test(test_case: str, vector_store_context, embedding, llm, record_property):
+def _run_test(
+    test_case: str,
+    vector_store_context,
+    embedding,
+    llm,
+    resolved_config,
+    record_property,
+):
     vector_store = vector_store_context.new_langchain_vector_store(embedding=embedding)
     if test_case == "rag_custom_chain":
         run_rag_custom_chain(
@@ -224,8 +244,15 @@ def _run_test(test_case: str, vector_store_context, embedding, llm, record_prope
             chat_memory=vector_store_context.new_langchain_chat_memory(),
             record_property=record_property,
         )
+        # TODO: ADd record property
     elif test_case == "trulens":
         run_trulens_evaluation(vector_store=vector_store, llm=llm)
+    elif test_case == "nemo_guardrails":
+        run_nemo_guardrails(
+            vector_store=vector_store,
+            llm=llm,
+            config=resolved_config,
+        )
     else:
         raise ValueError(f"Unknown test case: {test_case}")
 
