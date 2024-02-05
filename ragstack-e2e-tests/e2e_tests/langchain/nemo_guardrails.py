@@ -32,14 +32,43 @@ def _config(engine, model) -> str:
         engine: {engine}
         model: {model}
 
+
+    prompts:
+      - task: self_check_input
+        content: |
+          Your task is to check if the user message below complies with the following policies.
+
+          Policy for the user messages:
+          - should not contain curse words
+          - should not contain questions about france
+
+          User message: "{{ user_input }}"
+
+          Question: Should the user message be blocked (Yes or No)?
+          Answer:
+
+    rails:
+      input:
+        flows:
+          - self check input
+    """
+
+
+def _config2(engine, model) -> str:
+    return f"""
+    models:
+      - type: main
+        engine: {engine}
+        model: {model}
+
     prompts:
       - task: self_check_input
         content: |
           Your task is to check if the user message below complies with the company policy for talking with the company bot.
                 
           Company Policy for the user messages:
-          - should not contain fruits
-          - should not contain vegetables
+          - should not contain curse words
+          - should not contain questions about france
 
           User message: "{{ user_input }}"
 
@@ -72,16 +101,16 @@ def _try_runnable_rails(
     chain_with_rails = guardrails | chain
 
     response = chain_with_rails.invoke(
-        {"input": "When was MyFakeProductForTesting released for the first time?"}
+        "When was MyFakeProductForTesting released for the first time?"
     )
     print("MyFakeProduct response: ", response)
     # assert "2020" in response
 
-    response = chain_with_rails.invoke({"input": "What color is an apple?"})
+    response = chain_with_rails.invoke("What color is an apple?")
     print("Apple color response: ", response)
     # assert "I'm sorry, I can't respond to that" in response
 
-    response = chain_with_rails.invoke({"input": "What is the capital of France?"})
+    response = chain_with_rails.invoke("What is the capital of France?")
     print("Capital of France response: ", response)
     # assert "Paris" in response
 
@@ -92,6 +121,6 @@ def run_nemo_guardrails(
     retriever = vector_store.as_retriever()
     vector_store.add_texts(SAMPLE_DATA)
 
-    model_config = _config(config["engine"], config["model"])
+    model_config = _config2(config["engine"], config["model"])
     rails_config = RailsConfig.from_content(yaml_content=model_config)
     _try_runnable_rails(config=rails_config, llm=llm, retriever=retriever)
